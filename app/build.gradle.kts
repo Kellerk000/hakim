@@ -1,3 +1,6 @@
+import java.io.File
+import java.net.URI
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -95,10 +98,10 @@ val downloadFonts by tasks.registering {
     doLast {
         dir.mkdirs()
         listOf("Regular", "Medium", "SemiBold", "Bold").forEach { w ->
-            val f = java.io.File(dir, "IBMPlexSansArabic-$w.ttf")
+            val f = File(dir, "IBMPlexSansArabic-$w.ttf")
             if (!f.exists() || f.length() < 10_000) {
                 try {
-                    val url = java.net.URI(
+                    val url = URI(
                         "https://raw.githubusercontent.com/google/fonts/main/ofl/ibmplexsansarabic/IBMPlexSansArabic-$w.ttf"
                     ).toURL()
                     url.openStream().use { input -> f.outputStream().use { out -> input.copyTo(out) } }
