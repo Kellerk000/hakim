@@ -66,8 +66,8 @@ object AnswerParser {
         }
 
         val typeText = raw[Section.TYPE]?.let { ArabicText.normalize(it) }
-        val top = raw[Section.TOP]?.let { cleanItem(it) }?.takeIf { it.isNotBlank() }
-        val candidates = raw[Section.CANDIDATES]?.let { splitList(it, listSplit) }.orEmpty()
+        val top = raw[Section.TOP]?.let { cleanItem(it) }?.takeIf { it.isNotBlank() && !isPlaceholder(it) }
+        val candidates = raw[Section.CANDIDATES]?.let { splitList(it, listSplit) }.orEmpty().filterNot { isPlaceholder(it) }
         val mode = when {
             typeText != null && (typeText.contains("عده") || typeText.contains("احتمالات")) -> Mode.MULTIPLE
             typeText != null && (typeText.contains("مرجح") || typeText.contains("قوي")) -> Mode.STRONG
@@ -97,13 +97,13 @@ object AnswerParser {
             }
         }
 
-        val urgencyText = raw[Section.URGENCY]?.let { cleanItem(it) }
+        val urgencyText = raw[Section.URGENCY]?.let { cleanItem(it) }?.takeIf { it.isNotBlank() }
 
         return ParsedAnswer(
             mode = mode,
             top = top,
             candidates = candidates,
-            clues = raw[Section.CLUES]?.let { cleanItem(it) },
+            clues = raw[Section.CLUES]?.let { cleanItem(it) }?.takeIf { it.isNotBlank() },
             confirm = raw[Section.CONFIRM]?.let { splitList(it, testsSplit) }.orEmpty(),
             differentials = raw[Section.DIFFERENTIAL]?.let { splitList(it, listSplit) }.orEmpty(),
             nextText = plain.joinToString(" ").ifBlank { null },
@@ -111,7 +111,7 @@ object AnswerParser {
             discriminators = discriminators,
             urgencyText = urgencyText,
             urgency = urgencyText?.let { urgencyOf(it) } ?: Urgency.UNKNOWN,
-            redFlags = raw[Section.RED_FLAGS]?.let { cleanItem(it) },
+            redFlags = raw[Section.RED_FLAGS]?.let { cleanItem(it) }?.takeIf { it.isNotBlank() },
             footer = footer,
             sectionsFound = raw.size,
         )
@@ -141,6 +141,12 @@ object AnswerParser {
             t.contains("عياده") || t.contains("متابعه") || t.contains("روتين") -> Urgency.ROUTINE
             else -> Urgency.UNKNOWN
         }
+    }
+
+    /** نص من التعليمات انتسخ بدل الجواب، متل "(مع تشخيص مرجّح)". */
+    private fun isPlaceholder(s: String): Boolean {
+        val n = ArabicText.normalize(s)
+        return (n.startsWith("(") && n.contains("مع ")) || n.contains("اسم التشخيص") || n == "..." || n == "…"
     }
 
     private fun cleanItem(s: String): String =

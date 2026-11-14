@@ -137,7 +137,6 @@ Java_com_hakim_clinical_engine_LlamaEngine_nativeLoad(JNIEnv *env, jobject /*thi
     const char *path = env->GetStringUTFChars(jpath, nullptr);
     llama_model_params mp = llama_model_default_params();
     mp.n_gpu_layers = 0;
-    
     llama_model *model = llama_model_load_from_file(path, mp);
     env->ReleaseStringUTFChars(jpath, path);
     if (model == nullptr) {
@@ -241,7 +240,6 @@ Java_com_hakim_clinical_engine_LlamaEngine_nativeGenerate(
     }
 
     llama_sampler *smpl = llama_sampler_chain_init(llama_sampler_chain_default_params());
-    
     if (temperature <= 0.0f) {
         llama_sampler_chain_add(smpl, llama_sampler_init_greedy());
     } else {

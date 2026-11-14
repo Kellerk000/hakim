@@ -14,6 +14,10 @@ data class AppSettings(
     val modelPath: String? = null,
     val modelName: String? = null,
     val modelSize: Long = 0L,
+    /** 0 = حسب الجهاز، 1 = نهاري، 2 = ليلي */
+    val themeMode: Int = 0,
+    val lockEnabled: Boolean = false,
+    val setupSkipped: Boolean = false,
 ) {
     companion object {
         fun defaultThreads(): Int = (Runtime.getRuntime().availableProcessors() - 2).coerceIn(2, 6)
@@ -34,6 +38,9 @@ class SettingsStore(context: Context) {
             modelPath = prefs.getString("model_path", null)?.takeIf { File(it).exists() },
             modelName = prefs.getString("model_name", null),
             modelSize = prefs.getLong("model_size", 0L),
+            themeMode = prefs.getInt("theme_mode", d.themeMode),
+            lockEnabled = prefs.getBoolean("lock_enabled", d.lockEnabled),
+            setupSkipped = prefs.getBoolean("setup_skipped", d.setupSkipped),
         )
     }
 
@@ -47,6 +54,9 @@ class SettingsStore(context: Context) {
             .putString("model_path", s.modelPath)
             .putString("model_name", s.modelName)
             .putLong("model_size", s.modelSize)
+            .putInt("theme_mode", s.themeMode)
+            .putBoolean("lock_enabled", s.lockEnabled)
+            .putBoolean("setup_skipped", s.setupSkipped)
             .apply()
     }
 }
@@ -62,64 +72,79 @@ data class HistoryItem(
     val urgency: Urgency,
 )
 
-/** سجل الحالات، محفوظ محلياً بملف JSON داخل التطبيق فقط. */
+/** سجل التحليلات السريعة، مشفّر على الجهاز. */
 class HistoryStore(context: Context) {
-    private val file = File(context.filesDir, "history.json")
+    private val file = File(context.filesDir, "history.enc")
+    private val legacy = File(context.filesDir, "history.json")
 
     @Synchronized
     fun load(): List<HistoryItem> {
-        if (!file.exists()) return emptyList()
-        return runCatching {
-            val arr = JSONArray(file.readText(Charsets.UTF_8))
-            List(arr.length()) { i -> fromJson(arr.getJSONObject(i)) }
-        }.getOrDefault(emptyList())
+        if (file.exists()) {
+            return runCatching {
+                historyFromJson(JSONArray(String(Crypto.decrypt(file.readBytes()), Charsets.UTF_8)))
+            }.getOrDefault(emptyList())
+        }
+        if (legacy.exists()) {
+            // نقل السجل القديم (غير المشفّر) للصيغة المشفّرة
+            val items = runCatching { historyFromJson(JSONArray(legacy.readText(Charsets.UTF_8))) }.getOrDefault(emptyList())
+            runCatching {
+                save(items)
+                legacy.delete()
+            }
+            return items
+        }
+        return emptyList()
     }
 
     @Synchronized
     fun save(items: List<HistoryItem>) {
-        val arr = JSONArray()
-        items.take(MAX_ITEMS).forEach { arr.put(toJson(it)) }
-        val tmp = File(file.parentFile, "history.json.tmp")
-        tmp.writeText(arr.toString(), Charsets.UTF_8)
+        val bytes = Crypto.encrypt(historyToJson(items.take(MAX_ITEMS)).toString().toByteArray(Charsets.UTF_8))
+        val tmp = File(file.parentFile, "history.enc.tmp")
+        tmp.writeBytes(bytes)
         if (!tmp.renameTo(file)) {
-            file.writeText(arr.toString(), Charsets.UTF_8)
+            file.writeBytes(bytes)
             tmp.delete()
         }
     }
 
-    private fun toJson(h: HistoryItem) = JSONObject().apply {
-        put("id", h.id)
-        put("time", h.time)
-        put("case", h.caseText)
-        put("answer", h.answer)
-        put("title", h.title)
-        put("mode", h.mode.name)
-        put("urgency", h.urgency.name)
-        put("v_bp", h.vitals.bp)
-        put("v_hr", h.vitals.hr)
-        put("v_temp", h.vitals.temp)
-        put("v_spo2", h.vitals.spo2)
-        put("v_rr", h.vitals.rr)
-    }
-
-    private fun fromJson(o: JSONObject) = HistoryItem(
-        id = o.optLong("id"),
-        time = o.optLong("time"),
-        caseText = o.optString("case"),
-        vitals = Vitals(
-            bp = o.optString("v_bp"),
-            hr = o.optString("v_hr"),
-            temp = o.optString("v_temp"),
-            spo2 = o.optString("v_spo2"),
-            rr = o.optString("v_rr"),
-        ),
-        answer = o.optString("answer"),
-        title = o.optString("title"),
-        mode = runCatching { Mode.valueOf(o.optString("mode")) }.getOrDefault(Mode.UNKNOWN),
-        urgency = runCatching { Urgency.valueOf(o.optString("urgency")) }.getOrDefault(Urgency.UNKNOWN),
-    )
-
     companion object {
         private const val MAX_ITEMS = 300
+
+        fun historyToJson(items: List<HistoryItem>): JSONArray = JSONArray().apply {
+            items.forEach { h ->
+                put(JSONObject().apply {
+                    put("id", h.id)
+                    put("time", h.time)
+                    put("case", h.caseText)
+                    put("answer", h.answer)
+                    put("title", h.title)
+                    put("mode", h.mode.name)
+                    put("urgency", h.urgency.name)
+                    put("vitals", PatientStore.vitalsToJson(h.vitals))
+                })
+            }
+        }
+
+        fun historyFromJson(arr: JSONArray): List<HistoryItem> = List(arr.length()) { i ->
+            val o = arr.getJSONObject(i)
+            val vit = o.optJSONObject("vitals")?.let { PatientStore.vitalsFromJson(it) }
+                ?: Vitals(
+                    bp = o.optString("v_bp"),
+                    hr = o.optString("v_hr"),
+                    temp = o.optString("v_temp"),
+                    spo2 = o.optString("v_spo2"),
+                    rr = o.optString("v_rr"),
+                )
+            HistoryItem(
+                id = o.optLong("id"),
+                time = o.optLong("time"),
+                caseText = o.optString("case"),
+                vitals = vit,
+                answer = o.optString("answer"),
+                title = o.optString("title"),
+                mode = runCatching { Mode.valueOf(o.optString("mode")) }.getOrDefault(Mode.UNKNOWN),
+                urgency = runCatching { Urgency.valueOf(o.optString("urgency")) }.getOrDefault(Urgency.UNKNOWN),
+            )
+        }
     }
 }

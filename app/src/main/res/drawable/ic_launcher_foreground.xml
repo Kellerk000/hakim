@@ -4,15 +4,17 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- قلب ناعم مع خط نبض -->
     <path
-        android:pathData="M54,27a27,27 0,1 1,0 54a27,27 0,1 1,0 -54z"
-        android:strokeWidth="3"
-        android:strokeColor="#FF8B5CF6"
+        android:pathData="M54,78C54,78 30,64 30,46C30,38 36,32 43,32C48,32 52,35 54,39C56,35 60,32 65,32C72,32 78,38 78,46C78,64 54,78 54,78Z"
+        android:strokeWidth="3.5"
+        android:strokeColor="#FF5AB2F5"
+        android:strokeLineJoin="round"
         android:fillColor="#00000000" />
     <path
-        android:pathData="M31,56 L44,56 L49,45 L56,69 L62,37 L67,56 L77,56"
-        android:strokeWidth="5"
-        android:strokeColor="#FF2DE2C5"
+        android:pathData="M33,53 L45,53 L49,45 L55,62 L60,47 L64,53 L75,53"
+        android:strokeWidth="4.5"
+        android:strokeColor="#FF3CCFB8"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
         android:fillColor="#00000000" />
